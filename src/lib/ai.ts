@@ -3,7 +3,6 @@ import type { WebsiteStyle } from '../types/database';
 
 interface AIPromptResponse {
   html: string;
-  css: string;
   error?: string;
 }
 
@@ -44,6 +43,15 @@ async function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function cleanGeneratedCode(code: string): string {
+  // Remove markdown code block indicators and any surrounding backticks
+  return code
+    .replace(/^```(html)?/gm, '')  // Remove opening code block
+    .replace(/```$/gm, '')         // Remove closing code block
+    .replace(/^`|`$/g, '')         // Remove single backticks
+    .trim();                       // Remove extra whitespace
+}
+
 export async function generateLandingPage(
   prompt: string,
   style?: WebsiteStyle
@@ -56,76 +64,84 @@ export async function generateLandingPage(
       await waitForRateLimit();
       const openai = getOpenAIClient();
       
-      const systemPrompt = 'You are a helpful assistant specialized in web development and design.';
+      const systemPrompt = 'You are an expert web designer and developer. You are tasked with creating a landing page for a business using the provided brand assets and styles.';
 
       const styleGuide = style ? `
-Style Guide:
-${style.colors?.length ? `Brand Colors (use exactly):
-${style.colors.map(color => `- ${color}`).join('\n')}` : 'Use modern, professional colors'}
+      Style Guide:
+      ${style.colors?.length ? `Brand Colors (use exactly):
+      ${style.colors.map(color => `- ${color}`).join('\n')}` : 'Use modern, professional colors'}
 
-${style.fonts?.length ? `Typography (use exactly):
-${style.fonts.map(font => `- ${font}`).join('\n')}` : 'Use system fonts'}
+      ${style.fonts?.length ? `Typography (use exactly):
+      ${style.fonts.map(font => `- ${font}`).join('\n')}` : 'Use system fonts'}
 
-${style.logo ? `Brand Logo: ${style.logo}` : ''}
+      ${style.logo ? `Brand Logo: ${style.logo}` : ''}
 
-${style.images?.length ? `Visual Assets (use exactly):
-${style.images.map(img => `- ${img}`).join('\n')}` : ''}
+      ${style.images?.length ? `Visual Assets (use exactly):
+      ${style.images.map(img => `- ${img}`).join('\n')}` : ''}
 
-${style.metaDescription ? `Meta Description: ${style.metaDescription}` : ''}
+      ${style.metaDescription ? `Meta Description: ${style.metaDescription}` : ''}
 
-${style.headings?.length ? `Key Headings:
-${style.headings.map(h => `- ${h}`).join('\n')}` : ''}
+      ${style.headings?.length ? `Key Headings:
+      ${style.headings.map(h => `- ${h}`).join('\n')}` : ''}
 
-${style.styles ? `
-Layout Specifications:
-- Container Width: ${style.styles.layout.maxWidth}
-- Padding: ${style.styles.layout.containerPadding}
-- Section Spacing: ${style.styles.layout.gridGap}
+      ${style.styles ? `
+      Layout Specifications:
+      - Container Width: ${style.styles.layout.maxWidth}
+      - Padding: ${style.styles.layout.containerPadding}
+      - Section Spacing: ${style.styles.layout.gridGap}
 
-Call-to-Action Buttons:
-${style.styles.buttonStyles.map(btn => `- Background: ${btn.backgroundColor}, Text: ${btn.color}, Padding: ${btn.padding}, Radius: ${btn.borderRadius}`).join('\n')}
+      Call-to-Action Buttons:
+      ${style.styles.buttonStyles.map(btn => `- Background: ${btn.backgroundColor}, Text: ${btn.color}, Padding: ${btn.padding}, Radius: ${btn.borderRadius}`).join('\n')}
 
-Heading Styles:
-${style.styles.headerStyles.map(h => `- Font: ${h.fontFamily}, Size: ${h.fontSize}, Weight: ${h.fontWeight}, Color: ${h.color}`).join('\n')}
+      Heading Styles:
+      ${style.styles.headerStyles.map(h => `Size: ${h.fontSize}, Weight: ${h.fontWeight}, Color: ${h.color}`).join('\n')}
 
-Visual Effects:
-${style.styles.gradients?.length ? `Gradients:\n${style.styles.gradients.map(g => `- ${g}`).join('\n')}` : ''}
-${style.styles.shadows?.length ? `Shadows:\n${style.styles.shadows.map(s => `- ${s}`).join('\n')}` : ''}
-` : ''}` : '';
+      Visual Effects:
+      ${style.styles.gradients?.length ? `Gradients:\n${style.styles.gradients.map(g => `- ${g}`).join('\n')}` : ''}
+      ${style.styles.shadows?.length ? `Shadows:\n${style.styles.shadows.map(s => `- ${s}`).join('\n')}` : ''}
+      ` : ''}` : '';
 
-      const fullPrompt = `Create a high-converting, single-page landing page that captures the essence and branding of the reference website. The landing page should have a modern design with a responsive, semantic HTML5 layout, include interactive hover states on buttons, meet accessibility standards, and drive user action without a full navigation menu. Use the exact branding details provided below and insert Lorem Ipsum text as placeholder content (unless specific marketing text is provided).
+      const fullPrompt = `Create a high-converting, single-page landing page using ONLY the provided brand assets and styles.
+        Do not introduce any new colors, fonts, or images that aren't specified in the style guide below.
 
-${styleGuide}
+      ${styleGuide}
 
-Requirements:
-1. Use ONLY the exact colors, fonts, and styles specified above
-2. Create a responsive layout that works on all devices using semantic HTML5 elements
-3. Include hover states for interactive elements
-4. Ensure accessibility compliance
-5. Use provided background colors and images
-6. Include the logo and images in appropriate sections
-7. Follow the exact spacing and layout values provided
-8. Make sure any years are updated to the current year ${new Date().getFullYear()}
-9. Make sure that unless specified below, do not include any navigation or links in the header other than the logo
-10. Use Lorem Ipsum for all text content unless otherwise specified below.
+      STRICT REQUIREMENTS:
+      1. Use ONLY the brand colors, fonts, and visual assets provided.
+      2. Use ONLY the fonts listed (link any required fonts to Google Fonts).
+      3. Do not add any new colors, fonts, or images.
+      4. Create a responsive, mobile-first layout using semantic HTML5.
+      5. Include hover states for all interactive elements.
+      6. Ensure accessibility compliance.
+      7. Update any year references to ${new Date().getFullYear()}.
+      8. Do not include navigation links in the header (only display the logo).
+      9. Use Lorem Ipsum for all placeholder marketing text.
+      10. Include at least 3 distinct content sections with at least 3 sentences of text each.
+      11. Include a footer with the company logo, company name, and the year 2025.
 
-Additional Content Requirements:
-${prompt}
+      Additional Content Requirements:
+      ${prompt}
 
-Respond ONLY with the complete HTML code including embedded CSS. Do not include any explanations or markdown.`;
+      Respond ONLY with the complete HTML code including embedded CSS. Do not include any explanations or markdown.`;
+
+      console.log('[OpenAI] Sending payload:', {
+        systemPrompt,
+        fullPrompt
+      });
 
       const completion = await openai.chat.completions.create({
         model: "gpt-3.5-turbo",
         messages: [
-          { role: "system", content: systemPrompt },
+          { role: "system", content: systemPrompt },  // Ensure systemPrompt sets context clearly (e.g., "You are an expert web designer...")
           { role: "user", content: fullPrompt }
         ],
-        temperature: 0.7,
+        temperature: 0.5, // Lowered temperature for more deterministic output; try 0.5–0.7 based on testing.
         max_tokens: 4000,
-        top_p: 1,
-        frequency_penalty: 0,
-        presence_penalty: 0
+        top_p: 1,         // Adjust top_p if needed; 1 is typically fine.
+        frequency_penalty: 0, // Consider increasing slightly (e.g. 0.2) if you notice repetitive output.
+        presence_penalty: 0   // Adjust if necessary.
       });
+      
 
       const generatedCode = completion.choices[0].message.content;
 
@@ -133,10 +149,12 @@ Respond ONLY with the complete HTML code including embedded CSS. Do not include 
         throw new Error('Failed to generate landing page content');
       }
 
+      console.log('[OpenAI] Response received:', generatedCode.substring(0, 200) + '...');
+
       return {
-        html: generatedCode,
-        css: '',
+        html: cleanGeneratedCode(generatedCode),
       };
+
     } catch (error) {
       lastError = error instanceof Error ? error : new Error('Unknown error');
       
@@ -158,14 +176,14 @@ Respond ONLY with the complete HTML code including embedded CSS. Do not include 
     }
   }
 
+  // If all retries failed, return error
   return {
-    html: getFallbackTemplate(prompt, style),
-    css: '',
+    html: '',
     error: lastError?.message || 'Failed to generate content'
   };
 }
 
-export function getFallbackTemplate(prompt: string, style?: WebsiteStyle): string {
+export function getFallbackTemplate(style?: WebsiteStyle): string {
   const primaryColor = style?.colors?.[0] || '#4F46E5';
   const textColor = style?.colors?.[1] || '#1F2937';
   const backgroundColor = style?.colors?.[2] || '#F9FAFB';
@@ -341,4 +359,82 @@ export function getFallbackTemplate(prompt: string, style?: WebsiteStyle): strin
     </div>
 </body>
 </html>`;
+}
+
+export async function updateLandingPage(
+  prompt: string,
+  style?: WebsiteStyle,
+  currentHtml?: string
+): Promise<AIPromptResponse> {
+  let retries = 0;
+  let lastError: Error | null = null;
+
+  while (retries < MAX_RETRIES) {
+    try {
+      await waitForRateLimit();
+      const openai = getOpenAIClient();
+      
+      const systemPrompt = 'You are a helpful assistant specialized in web development and design. Your task is to update an existing landing page while maintaining its structure and style.';
+
+      const styleGuide = style ? `
+      Available Assets (keep these unless specifically asked to change):
+      ${style.colors?.length ? `Colors: ${style.colors.join(', ')}` : ''}
+      ${style.fonts?.length ? `Fonts: ${style.fonts.join(', ')}` : ''}
+      ${style.logo ? `Logo: ${style.logo}` : ''}
+      ${style.images?.length ? `Images: ${style.images.join(', ')}` : ''}` : '';
+
+      const fullPrompt = `Please review the provided HTML and update it according to the following prompt. Keep all existing assets, styles, and structure unless specifically asked to change them.
+
+      ${styleGuide}
+
+      Current HTML:
+      ${currentHtml || ''}
+
+      Update Request:
+      ${prompt}
+
+      Respond ONLY with the complete updated HTML.`;
+
+      console.log('[OpenAI] Sending update payload:', {
+        systemPrompt,
+        fullPrompt
+      });
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: fullPrompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 4000,
+        top_p: 1,
+        frequency_penalty: 0,
+        presence_penalty: 0
+      });
+
+      const generatedCode = completion.choices[0].message.content;
+      if (!generatedCode) {
+        throw new Error('Failed to update landing page content');
+      }
+
+      return {
+        html: cleanGeneratedCode(generatedCode)
+      };
+
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('Unknown error');
+      if (!lastError.message.includes('rate_limit')) break;
+      retries++;
+      if (retries < MAX_RETRIES) {
+        await delay(RETRY_DELAY * retries);
+        continue;
+      }
+    }
+  }
+
+  return {
+    html: '',
+    error: lastError?.message || 'Failed to update content'
+  };
 }

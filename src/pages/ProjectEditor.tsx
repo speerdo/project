@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Editor from '@monaco-editor/react';
@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import { getProjectVersions, createVersion } from '../lib/supabase';
-import { generateLandingPage } from '../lib/ai';
+import { generateLandingPage, updateLandingPage } from '../lib/ai';
 import type { Version } from '../types/database';
 
 function ProjectEditor() {
@@ -35,11 +35,7 @@ function ProjectEditor() {
   const [aiPrompt, setAiPrompt] = useState('');
   const [showAiPrompt, setShowAiPrompt] = useState(false);
 
-  useEffect(() => {
-    loadVersions();
-  }, [projectId]);
-
-  async function loadVersions() {
+  const loadVersions = useCallback(async () => {
     if (!projectId) return;
     setIsLoading(true);
     try {
@@ -52,10 +48,15 @@ function ProjectEditor() {
       }
     } catch (err) {
       setError('Failed to load project versions');
+      console.error(err);
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [projectId]);
+
+  useEffect(() => {
+    loadVersions();
+  }, [loadVersions]);
 
   const handleSave = async () => {
     if (!projectId || !user) return;
@@ -71,6 +72,7 @@ function ProjectEditor() {
       setVersions([newVersion, ...versions]);
       setCurrentVersion(newVersion);
     } catch (err) {
+      console.error(err);
       setError('Failed to save version');
     } finally {
       setIsSaving(false);
@@ -99,7 +101,10 @@ function ProjectEditor() {
     setError(null);
 
     try {
-      const result = await generateLandingPage(aiPrompt, currentVersion?.settings?.extracted_styles);
+      const result = currentVersion?.html_content 
+        ? await updateLandingPage(aiPrompt, currentVersion.settings, currentVersion.html_content)
+        : await generateLandingPage(aiPrompt, currentVersion?.settings);
+
       if (result.error) {
         setError(result.error);
       } else {
@@ -107,6 +112,7 @@ function ProjectEditor() {
         setShowAiPrompt(false);
       }
     } catch (err) {
+      console.error(err);
       setError('Failed to generate content');
     } finally {
       setIsGenerating(false);

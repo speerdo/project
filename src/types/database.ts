@@ -39,7 +39,7 @@ export interface ProjectSettings {
   extracted_styles?: WebsiteStyle;
   deployment?: {
     platform: 'webflow' | 'custom';
-    settings: Record<string, any>;
+    settings: Record<string, unknown>;
   };
 }
 
@@ -50,24 +50,26 @@ export interface WebsiteStyle {
   logo?: string;
   metaDescription?: string;
   headings?: string[];
-  styles?: {
+  styles: {
+    spacing: string[];
+    borderRadius: string[];
     layout: {
       maxWidth: string;
       containerPadding: string;
       gridGap: string;
     };
-    buttonStyles: Array<{
+    buttonStyles: {
       backgroundColor: string;
       color: string;
       padding: string;
       borderRadius: string;
-    }>;
-    headerStyles: Array<{
+    }[];
+    headerStyles: {
       fontFamily: string;
       fontSize: string;
       fontWeight: string;
       color: string;
-    }>;
+    }[];
     gradients: string[];
     shadows: string[];
   };
